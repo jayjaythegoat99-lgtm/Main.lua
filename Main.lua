@@ -1,16 +1,18 @@
--- [[ DELTA BLOX FRUITS: THE GOAT EDITION V5 - FINAL ]] --
+-- [[ DELTA BLOX FRUITS: THE GOAT EDITION V9 ]] --
 
 local Settings = {
     AutoFarm = false,
     AutoStats = false,
     ChestFarm = false,
-    SafeMode = true,
-    Weapon = "Combat",       -- Set to your weapon name
-    Enemy = "Bandit",        -- The mob you are currently farming
-    QuestNPC = "Bandit Quest Giver", -- Name of the NPC
-    QuestName = "BanditQuest1",      -- The internal quest name
-    QuestLevel = 1,                 -- Level requirement
-    Distance = 2.8           -- Optimized height to hit without being hit
+    AutoClicker = false,
+    ClickPos = Vector2.new(0, 0),
+    Weapon = "Combat", 
+    Enemy = "Bandit",
+    QuestNPC = "Bandit Quest Giver",
+    QuestName = "BanditQuest1",
+    QuestLevel = 1,
+    Distance = 2.8,
+    ClickJitter = 4
 }
 
 -- Services
@@ -18,125 +20,81 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 
 -- UI Setup
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "DeltaUltimateV5"
+ScreenGui.Name = "DeltaV9"
 ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- --- 1. FLOATING OPEN/CLOSE TOGGLE BUTTON ---
+local OpenCloseBtn = Instance.new("TextButton")
+OpenCloseBtn.Size = UDim2.new(0, 50, 0, 50)
+OpenCloseBtn.Position = UDim2.new(0, 10, 0.5, -25)
+OpenCloseBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+OpenCloseBtn.Text = "D"
+OpenCloseBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+OpenCloseBtn.Font = Enum.Font.GothamBold
+OpenCloseBtn.TextSize = 25
+OpenCloseBtn.Parent = ScreenGui
+OpenCloseBtn.Draggable = true -- You can move the 'D' button around!
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = ToolRT.new(0, 25)
+UICorner.Parent = OpenCloseBtn
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 250, 0, 480)
-Main.Position = UDim2.new(0.5, -125, 0.5, -240)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-Main.BorderSizePixel = 0
+Main.Size = UDim2.new(0, 250, 0, 560)
+Main.Position = UDim2.new(0.5, -125, 0.5, -280)
+Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+Main.Visible = true
 Main.Active = true
 Main.Draggable = true
 Main.Parent = ScreenGui
 
+-- Toggle Function for the 'D' Button
+OpenCloseBtn.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
+end)
+
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 45)
-Title.Text = "ULTIMATE GOAT V5"
-Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.Text = "ULTIMATE HUB V9"
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 Title.TextColor3 = Color3.fromRGB(0, 255, 150)
 Title.Font = Enum.Font.GothamBold
 Title.Parent = Main
 
--- Helper: Create Toggle Buttons
+-- Helper: Create Toggles
 local function CreateToggle(text, pos, varName)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0.9, 0, 0, 35)
     btn.Position = pos
     btn.Text = text .. ": OFF"
-    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Parent = Main
     
     btn.MouseButton1Click:Connect(function()
         Settings[varName] = not Settings[varName]
         btn.Text = text .. (Settings[varName] and ": ON" or ": OFF")
-        btn.BackgroundColor3 = Settings[varName] and Color3.fromRGB(0, 180, 100) or Color3.fromRGB(45, 45, 45)
+        btn.BackgroundColor3 = Settings[varName] and Color3.fromRGB(0, 180, 100) or Color3.fromRGB(40, 40, 40)
     end)
     return btn
 end
 
--- 1. FIXED AUTO-QUEST & FARM (NO NPC TELEPORT)
-CreateToggle("Auto-Quest & Farm", UDim2.new(0.05, 0, 0.12, 0), "AutoFarm")
+-- --- 2. GAMEPLAY FEATURES ---
+CreateToggle("Auto-Quest & Farm", UDim2.new(0.05, 0, 0.1, 0), "AutoFarm")
+CreateToggle("Auto-Stats (Melee)", UDim2.new(0.05, 0, 0.18, 0), "AutoStats")
+CreateToggle("Chest Farm", UDim2.new(0.05, 0, 0.26, 0), "ChestFarm")
 
-spawn(function()
-    while task.wait() do
-        if Settings.AutoFarm then
-            pcall(function()
-                local char = LocalPlayer.Character
-                local root = char.HumanoidRootPart
-                
-                -- Check for Quest
-                local hasQuest = LocalPlayer.PlayerGui.Main.Quest.Visible
-                
-                if not hasQuest then
-                    -- Go to NPC
-                    local npc = workspace.NPCs:FindFirstChild(Settings.QuestNPC)
-                    if npc then
-                        root.CFrame = npc.HumanoidRootPart.CFrame * CFrame.new(0, 3, 0)
-                        task.wait(0.5)
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", Settings.QuestName, Settings.QuestLevel)
-                    end
-                else
-                    -- Farm Enemies (NPCs STAY STILL)
-                    local tool = LocalPlayer.Backpack:FindFirstChild(Settings.Weapon) or char:FindFirstChild(Settings.Weapon)
-                    if tool and not char:FindFirstChild(Settings.Weapon) then 
-                        char.Humanoid:EquipTool(tool) 
-                    end
-                    
-                    for _, v in pairs(workspace.Enemies:GetChildren()) do
-                        if v.Name == Settings.Enemy and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-                            -- We teleport to the NPC's head
-                            root.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, Settings.Distance, 0)
-                            
-                            -- PUNCH METHODS (Fixed)
-                            ReplicatedStorage.Remotes.CommF_:InvokeServer("Attack", v.HumanoidRootPart)
-                            VirtualUser:CaptureController()
-                            VirtualUser:ClickButton1(Vector2.new(0,0))
-                            
-                            task.wait(0.05)
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
-
--- 2. AUTO STATS (Melee)
-CreateToggle("Auto-Stats (Melee)", UDim2.new(0.05, 0, 0.22, 0), "AutoStats")
-spawn(function()
-    while task.wait(1) do
-        if Settings.AutoStats then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("AddPoint", "Melee", 1)
-        end
-    end
-end)
-
--- 3. CHEST FARM
-CreateToggle("Chest Farm", UDim2.new(0.05, 0, 0.32, 0), "ChestFarm")
-spawn(function()
-    while task.wait(0.5) do
-        if Settings.ChestFarm then
-            for _, v in pairs(workspace:GetChildren()) do
-                if v.Name:find("Chest") then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = v.CFrame
-                    task.wait(0.2)
-                end
-            end
-        end
-    end
-end)
-
--- 4. SERVER HOPPER
+-- --- 3. SERVER HOPPER ---
 local HopBtn = Instance.new("TextButton")
 HopBtn.Size = UDim2.new(0.9, 0, 0, 35)
-HopBtn.Position = UDim2.new(0.05, 0, 0.42, 0)
+HopBtn.Position = UDim2.new(0.05, 0, 0.34, 0)
 HopBtn.Text = "Server Hop"
 HopBtn.BackgroundColor3 = Color3.fromRGB(80, 0, 150)
 HopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -151,26 +109,86 @@ HopBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- 5. SAFE MODE
-CreateToggle("Safe Mode", UDim2.new(0.05, 0, 0.52, 0), "SafeMode")
-Players.PlayerAdded:Connect(function(player)
-    player.Chatted:Connect(function()
-        if Settings.SafeMode then Main.Visible = false; task.wait(8); Main.Visible = true end
+-- --- 4. ULTRA FAST AUTO-CLICKER ---
+local SetPosBtn = Instance.new("TextButton")
+SetPosBtn.Size = UDim2.new(0.9, 0, 0, 35)
+SetPosBtn.Position = UDim2.new(0.05, 0, 0.55, 0)
+SetPosBtn.Text = "Set Click Position"
+SetPosBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 180)
+SetPosBtn.Parent = Main
+
+SetPosBtn.MouseButton1Click:Connect(function()
+    SetPosBtn.Text = "CLICK TARGET NOW..."
+    local connection
+    connection = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            Settings.ClickPos = Vector2.new(input.Position.X, input.Position.Y)
+            SetPosBtn.Text = "POS LOCKED"
+            connection:Disconnect()
+        end
     end)
 end)
 
--- 6. ANTI-AFK
-LocalPlayer.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+CreateToggle("Auto Clicker (0.01)", UDim2.new(0.05, 0, 0.63, 0), "AutoClicker")
+
+-- --- 5. BACKGROUND LOOPS ---
+-- Auto Clicker Loop (Ultra Fast)
+spawn(function()
+    while true do
+        task.wait(0.01)
+        if Settings.AutoClicker then
+            pcall(function()
+                local rx = Settings.ClickPos.X + math.random(-Settings.ClickJitter, Settings.ClickJitter)
+                local ry = Settings.ClickPos.Y + math.random(-Settings.ClickJitter, Settings.ClickJitter)
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton1(Vector2.new(rx, ry))
+            end)
+        end
+    end
 end)
 
--- 7. CLOSE
+-- Auto Farm Loop
+spawn(function()
+    while task.wait() do
+        if Settings.AutoFarm then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local root = char.HumanoidRootPart
+                if not LocalPlayer.PlayerGui.Main.Quest.Visible then
+                    local npc = workspace.NPCs:FindFirstChild(Settings.QuestNPC)
+                    if npc then
+                        root.CFrame = npc.HumanoidRootPart.CFrame * CFrame.new(0, 3, 0)
+                        task.wait(0.5)
+                        ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", Settings.QuestName, Settings.QuestLevel)
+                    end
+                else
+                    for _, v in pairs(workspace.Enemies:GetChildren()) do
+                        if v.Name == Settings.Enemy and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                            root.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, Settings.Distance, 0)
+                            ReplicatedStorage.Remotes.CommF_:InvokeServer("Attack", v.HumanoidRootPart)
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- Stats Loop
+spawn(function()
+    while task.wait(1) do
+        if Settings.AutoStats then
+            ReplicatedStorage.Remotes.CommF_:InvokeServer("AddPoint", "Melee", 1)
+        end
+    end
+end)
+
+-- Unload
 local Close = Instance.new("TextButton")
 Close.Size = UDim2.new(0.9, 0, 0, 35)
-Close.Position = UDim2.new(0.05, 0, 0.88, 0)
-Close.Text = "UNLOAD"
+Close.Position = UDim2.new(0.05, 0, 0.92, 0)
+Close.Text = "DELETE HUB"
 Close.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
 Close.TextColor3 = Color3.fromRGB(255, 255, 255)
 Close.Parent = Main
